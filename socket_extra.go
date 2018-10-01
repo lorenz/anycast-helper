@@ -87,7 +87,7 @@ func (r *socketRequest) Serialize() []byte {
 func (r *socketRequest) Len() int { return sizeofSocketRequest }
 
 // GetListenersOnPort returns the Socket identified by its local and remote addresses.
-func HasListenersOnPort(port uint16) (bool, error) {
+func HasListenersOnPort4(port uint16) (bool, error) {
 	s, err := nl.Subscribe(unix.NETLINK_INET_DIAG)
 	if err != nil {
 		return false, err
@@ -120,10 +120,47 @@ func HasListenersOnPort(port uint16) (bool, error) {
 	return len(msgs[0].Data) >= sizeofSocket, nil
 }
 
+func HasListenersOnPort6(port uint16) (bool, error) {
+	s, err := nl.Subscribe(unix.NETLINK_INET_DIAG)
+	if err != nil {
+		return false, err
+	}
+	defer s.Close()
+	req := nl.NewNetlinkRequest(nl.SOCK_DIAG_BY_FAMILY, unix.NLM_F_DUMP)
+	req.AddData(&socketRequest{
+		Family:   unix.AF_INET6,
+		Protocol: unix.IPPROTO_TCP,
+		States:   1 << TCP_LISTEN,
+		ID: netlink.SocketID{
+			SourcePort:      port,
+			DestinationPort: 0,
+			Source:          net.IP{0, 0, 0, 0, 0, 0, 0, 0},
+			Destination:     net.IP{0, 0, 0, 0, 0, 0, 0, 0},
+			Cookie:          [2]uint32{0, 0},
+		},
+	})
+	s.Send(req)
+	msgs, err := s.Receive()
+	if err != nil {
+		return false, err
+	}
+	if len(msgs) == 0 {
+		return false, errors.New("no message nor error from netlink")
+	}
+	if len(msgs) > 2 {
+		return true, nil
+	}
+	return len(msgs[0].Data) >= sizeofSocket, nil
+}
+
 func HasListenersOnPortSimple(port uint16) bool {
-	hasListeners, err := HasListenersOnPort(port)
+	hasListeners4, err := HasListenersOnPort4(port)
 	if err != nil {
 		return false
 	}
-	return hasListeners
+	hasListeners6, err := HasListenersOnPort6(port)
+	if err != nil {
+		return false
+	}
+	return hasListeners4 || hasListeners6
 }
