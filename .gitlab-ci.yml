@@ -1,0 +1,15 @@
+build:
+  stage: build
+  image: golang:1.10
+  variables:
+    REPO_NAME: git.dolansoft.org/dolansoft/anycast-helper
+    CGO_ENABLED: "0"
+  script:
+  - mkdir -p $GOPATH/src/$REPO_NAME
+  - ln -svf $CI_PROJECT_DIR/* $GOPATH/src/$REPO_NAME
+  - cd $GOPATH/src/$REPO_NAME
+  - go get .
+  - go build .
+  artifacts:
+    paths:
+      - anycast-helper
